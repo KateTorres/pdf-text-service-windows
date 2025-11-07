@@ -1,6 +1,6 @@
 import fitz  # PyMuPDF
 import tkinter as tk
-from tkinter import filedialog, simpledialog
+from tkinter import filedialog, simpledialog, messagebox
 from PIL import Image, ImageTk
 import json
 import os
@@ -22,6 +22,7 @@ class PDFRectangleSelector:
         self.menu.add_command(label="Open PDF", command=self.open_pdf)
         self.menu.add_command(label="Prev Page", command=self.prev_page)
         self.menu.add_command(label="Next Page", command=self.next_page)
+        self.menu.add_command(label="Clear Markings", command=self.clear_rectangles)
         self.menu.add_command(label="Save JSON", command=self.save_json)
 
         # Bind events
@@ -43,6 +44,9 @@ class PDFRectangleSelector:
         self.json_base = None
         self.page_rectangles = []  # stores coordinates for current page
         self.rect_draw_order = 1
+
+        # Ensure ./regions folder exists
+        os.makedirs("regions", exist_ok=True)
 
     def open_pdf(self):
         pdf_path = filedialog.askopenfilename(filetypes=[("PDF files", "*.pdf")])
@@ -83,9 +87,11 @@ class PDFRectangleSelector:
 
         # Redraw previous rectangles for this page
         for rect in self.page_rectangles:
-            self.canvas.create_rectangle(rect["screen_x0"], rect["screen_y0"],
-                                         rect["screen_x1"], rect["screen_y1"],
-                                         outline="red", width=2)
+            self.canvas.create_rectangle(
+                rect["screen_x0"], rect["screen_y0"],
+                rect["screen_x1"], rect["screen_y1"],
+                outline="red", width=2
+            )
 
     def next_page(self):
         if self.pdf_doc and self.page_num < len(self.pdf_doc) - 1:
@@ -120,7 +126,14 @@ class PDFRectangleSelector:
 
         x0, y0, x1, y1 = self.canvas.coords(self.current_rect)
 
-        # Convert to PDF coords (top-left origin)
+        # Skip zero-area rectangles
+        if abs(x1 - x0) < 2 or abs(y1 - y0) < 2:
+            print(f"[WARN] Ignored zero-area rectangle on page {self.page_num + 1}")
+            self.canvas.delete(self.current_rect)
+            self.current_rect = None
+            return
+
+        # Convert to PDF coordinates
         pdf_x0 = min(x0, x1) * self.scale
         pdf_y0 = min(y0, y1) * self.scale
         pdf_x1 = max(x0, x1) * self.scale
@@ -167,12 +180,24 @@ class PDFRectangleSelector:
         self.selected_rect = None
         self.canvas.unbind("<B3-Motion>")
 
+    def clear_rectangles(self):
+        """Remove all drawn rectangles from the current page."""
+        if not self.page_rectangles:
+            return
+        if messagebox.askyesno("Clear Markings", "Are you sure you want to remove all rectangles?"):
+            self.page_rectangles.clear()
+            self.show_page(self.page_num)
+            print(f"Cleared all rectangles on page {self.page_num + 1}")
+
     def save_json(self):
         if not self.page_rectangles:
             print(f"No rectangles drawn on page {self.page_num + 1}.")
             return
 
-        # Convert rectangles to PDF coordinate form only
+        # Ensure the ./regions directory exists
+        os.makedirs("regions", exist_ok=True)
+
+        # Convert rectangles to PDF coordinate form
         json_data = [
             {
                 "order": r["order"],
@@ -185,11 +210,12 @@ class PDFRectangleSelector:
             for r in self.page_rectangles
         ]
 
-        json_filename = f"{self.json_base}_page{self.page_num + 1}.json"
+        json_filename = os.path.join("regions", f"{self.json_base}_page{self.page_num + 1}.json")
         with open(json_filename, "w", encoding="utf-8") as f:
             json.dump(json_data, f, indent=2, ensure_ascii=False)
 
         print(f"Saved {len(json_data)} rectangles to {json_filename}")
+
 
 # Run
 if __name__ == "__main__":
