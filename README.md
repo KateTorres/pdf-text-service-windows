@@ -2,7 +2,7 @@
 
 
 
-This repository contains a simple \*\*Tkinter-based GUI\*\* for selecting text regions in PDF files.  
+This repository contains a simple Tkinter-based GUI for selecting text regions in PDF files.  
 
 It generates JSON files describing rectangular areas that can be processed by the companion code.
 
